@@ -3,6 +3,7 @@ Document Retrieval System
 
 This module implements text retrieval methods using both TF-IDF and neural embeddings.
 It provides functionality to rank documents based on relevance to a query.
+MPS support is enabled for Apple Silicon devices.
 """
 
 import math
@@ -16,18 +17,37 @@ from transformers import AutoTokenizer, AutoModel
 class DocumentRetriever:
     """A class for retrieving and ranking documents based on similarity to queries."""
     
-    def __init__(self, document_collection: List[Dict[str, Any]], model_name: str = "answerdotai/ModernBERT-base"):
+    def __init__(self, document_collection: List[Dict[str, Any]], model_name: str = "answerdotai/ModernBERT-base", use_mps: bool = True):
         """
         Initialize the document retrieval system.
         
         Args:
             document_collection: A list of documents containing at least a 'text' field
             model_name: Transformer model name to use for neural embeddings
+            use_mps: Whether to use MPS acceleration if available
         """
         self.documents = document_collection
         self.tokenizer = None
         self.model = None
         self.model_name = model_name
+        self.device = self._get_device(use_mps)
+        
+    def _get_device(self, use_mps: bool) -> torch.device:
+        """
+        Determine the appropriate device for computation.
+        
+        Args:
+            use_mps: Whether to use MPS if available
+            
+        Returns:
+            The torch device to use
+        """
+        if use_mps and torch.backends.mps.is_available():
+            return torch.device("mps")
+        elif torch.cuda.is_available():
+            return torch.device("cuda")
+        else:
+            return torch.device("cpu")
         
     def load_neural_model(self) -> Tuple[AutoModel, AutoTokenizer]:
         """
@@ -39,6 +59,7 @@ class DocumentRetriever:
         if self.model is None or self.tokenizer is None:
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             self.model = AutoModel.from_pretrained(self.model_name)
+            self.model.to(self.device)
         
         return self.model, self.tokenizer
         
@@ -112,7 +133,7 @@ class DocumentRetriever:
         
         return np.dot(vec1, vec2) / (vec1_norm * vec2_norm)
     
-    def get_neural_embedding(self, text: str, max_length: int = 512) -> torch.Tensor:
+    def get_neural_embedding(self, text: str, max_length: int = 8192) -> torch.Tensor:
         """
         Get neural embedding for a text using the loaded model.
         
@@ -131,6 +152,8 @@ class DocumentRetriever:
         with torch.no_grad():
             encoded = tokenizer(truncated_text, return_tensors="pt", truncation=True, 
                                 max_length=max_length)
+            # Move input tensors to the appropriate device
+            encoded = {k: v.to(self.device) for k, v in encoded.items()}
             outputs = model(**encoded)
             # Use the [CLS] token embedding as the text representation
             return outputs.last_hidden_state[0, 0]
@@ -229,8 +252,13 @@ if __name__ == "__main__":
                             name="obscure_questions", 
                             split="tiny")
     
-    # Create document retriever
-    retriever = DocumentRetriever(wiki)
+    # Print device information
+    print(f"MPS available: {torch.backends.mps.is_available()}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    
+    # Create document retriever with MPS enabled
+    retriever = DocumentRetriever(wiki, use_mps=True)
+    print(f"Using device: {retriever.device}")
     
     # Example 1: TF-IDF ranking
     cs_profs = retriever.rank_by_tf_idf("Northeastern University computer science professor", top_n=20)

@@ -41,7 +41,6 @@ def extract_answer(resp: str) -> str:
     """
     for char in resp:
         if char in 'ABCD':
-            print(char)
             return char
         
     
