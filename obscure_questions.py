@@ -31,24 +31,82 @@ Based on the above information, answer the following multiple choice question:
 
 def extract_answer(resp: str) -> str:
     """
-    Extract multiple choice answer from model response.
+    Extract the first multiple choice answer (A, B, C, D) that appears in a text.
 
     Args:
         resp: Model response to some question
     
     Returns:
-        Multiple choice answer
+        The first capital letter A, B, C, or D that appears in the text, or None if none found
     """
-    if 'A' in resp:
-        return 'A'
-    if 'B' in resp:
-        return 'B'
-    if 'C' in resp:
-        return 'C'
-    if 'D' in resp:
-        return 'D'
+    for char in resp:
+        if char in 'ABCD':
+            print(char)
+            return char
+        
     
     return None
+from typing import List
+
+def answer_query(question: str, choices: List[str], documents: List[str]) -> str:
+    """
+    Answers a multiple choice question using retrieval augmented generation.
+
+    `question` is the text of the question. `choices` is the list of choices
+     with leading letters. For example:
+
+     ```
+     ["A. Choice 1", "B. Choice 2", "C. Choice 3", "D. Choice 4"]
+     ```
+
+     `documents` is the list of documents to use for retrieval augmented
+     generation.
+
+     The result should be the just the letter of the correct choice, e.g.,
+     `"A"` but not `"A."` and not `"A. Choice 1"`.
+
+     """
+    retriever = DocumentRetriever(documents)
+
+    docs = retriever.retrieve_documents(question, final_top_n=5)
+
+        # Format messages
+    user_prompt = format_user_prompt(question, choices, docs)
+    messages = [
+        {
+            "role": "user",
+            "content": user_prompt
+        }
+    ]
+    
+    # Load model client
+    client = OpenAI(
+        api_key="fahy.jo@northeastern.edu:46582",
+        base_url="https://nerc.guha-anderson.com/v1"
+    )
+
+    try:
+        # Query model
+        resp = client.chat.completions.create(
+            messages = messages,
+            model = "llama3p1-8b-instruct",
+            temperature=0
+        )
+
+            # Extract answer
+        model_answer = extract_answer(resp.choices[0].message.content)
+    except Exception as e:
+        resp = ""
+        print(len(messages))
+        print(f"failed to get ai answer: {e}")
+
+        return None, None
+    
+    
+
+
+    return model_answer, resp.choices[0].message.content
+
 
 
 if __name__ == "__main__":
@@ -62,14 +120,6 @@ if __name__ == "__main__":
                             name="obscure_questions", 
                             split="tiny")
 
-    # Create document retriever
-    retriever = DocumentRetriever(wiki)
-
-    # Load model client
-    client = OpenAI(
-        api_key="fahy.jo@northeastern.edu:46582",
-        base_url="https://nerc.guha-anderson.com/v1"
-    )
 
     # Answer questions
     num_correct = 0
@@ -79,34 +129,20 @@ if __name__ == "__main__":
         choices = question['choices']
         answer = question['correct_answer']
 
-        # TF-IDF retrieval / Neural reranking
-        docs = retriever.retrieve_documents(prompt, final_top_n=8)
+        model_answer, resp = answer_query(prompt, choices, wiki)
 
-        # Format messages
-        user_prompt = format_user_prompt(prompt, choices, docs)
-        messages = [
-            {
-                "role": "user",
-                "content": user_prompt
-            }
-        ]
-        
-        # Query model
-        resp = client.chat.completions.create(
-            messages = messages,
-            model = "llama3p1-8b-instruct",
-            temperature=0
-        )
-        
-        # Extract answer
-        model_answer = extract_answer(resp.choices[0].message.content)
         if not model_answer:
             print(f"Failed to extract answer for question: {i}")
+            # print(resp)
         
         # Check answer
         if model_answer == answer:
+            # print('correct')
             num_correct += 1
             solved_questions.append(i)
+
+        # else:
+            # print(resp)
     
     # Print results
     print(f"Solved {num_correct} questions")

@@ -16,7 +16,7 @@ from transformers import AutoTokenizer, AutoModel
 class DocumentRetriever:
     """A class for retrieving and ranking documents based on similarity to queries."""
     
-    def __init__(self, document_collection: List[Dict[str, Any]], model_name: str = "roberta-base"):
+    def __init__(self, document_collection: List[Dict[str, Any]], model_name: str = "answerdotai/ModernBERT-base"):
         """
         Initialize the document retrieval system.
         
@@ -176,7 +176,7 @@ class DocumentRetriever:
         ranked_docs = []
         for doc in docs:
             # Limit text length for efficiency
-            doc_vec = self.get_neural_embedding(doc['text'][:514])
+            doc_vec = self.get_neural_embedding(doc['text'])
             similarity = self.compute_cosine_similarity(query_vec, doc_vec)
             ranked_docs.append((doc, similarity))
         
