@@ -108,8 +108,17 @@ def answer_query(question: str, choices: List[str], documents: List[str]) -> str
         The model's answer to the given question.
 
     """
+    # Load model client
+    client = OpenAI(
+        api_key="fahy.jo@northeastern.edu:46582",
+        base_url="https://nerc.guha-anderson.com/v1"
+    )
+
+    # Wrap documents
     documents = [{'title': f"Article {i}", 'text': doc} for i, doc in enumerate(documents)]
-    return solve(question, choices, documents)
+
+    # Solve problem
+    return solve(client, question, choices, documents)
 
 
 if __name__ == "__main__":
