@@ -178,8 +178,7 @@ class DocumentRetriever:
                         self.compute_tf_idf_vector(query_terms, x["text"])), reverse = True)
         
         return post_sort[:top_n]
-
-    
+ 
     def rank_by_neural_similarity(self, docs: List[Dict[str, Any]], query: str, 
                                  top_n: Optional[int] = None) -> List[Dict[str, Any]]:
         """

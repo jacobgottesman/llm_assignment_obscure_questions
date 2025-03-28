@@ -5,7 +5,7 @@ from openai import OpenAI
 from tqdm import tqdm
 
 
-def format_user_prompt(question: str, choices: List[str], docs: List[Dict[str, Any]]) -> str:
+def format_user_prompt(question: str, choices: List[str], docs: List[Dict[str, str]]) -> str:
     """
     Format user prompt.
 
@@ -45,31 +45,32 @@ def extract_answer(resp: str) -> str:
         
     
     return None
-from typing import List
 
-def answer_query(question: str, choices: List[str], documents: List[str]) -> str:
+def solve(client, question: str, choices: List[str], documents: Dict[str, str]) -> str:
     """
     Answers a multiple choice question using retrieval augmented generation.
 
-    `question` is the text of the question. `choices` is the list of choices
-     with leading letters. For example:
+    `client` is the model api client.
+
+    `question` is the text of the question.
+    
+    `choices` is the list of choices with leading letters. For example:
 
      ```
      ["A. Choice 1", "B. Choice 2", "C. Choice 3", "D. Choice 4"]
      ```
 
-     `documents` is the list of documents to use for retrieval augmented
-     generation.
+    `documents` is the list of documents to use for retrieval augmented
+    generation.
 
-     The result should be the just the letter of the correct choice, e.g.,
-     `"A"` but not `"A."` and not `"A. Choice 1"`.
-
-     """
+    The result should be the just the letter of the correct choice, e.g.,
+    `"A"` but not `"A."` and not `"A. Choice 1"`.
+    """
+    # Retrieve documents
     retriever = DocumentRetriever(documents)
-
     docs = retriever.retrieve_documents(question, final_top_n=5)
 
-        # Format messages
+    # Format messages
     user_prompt = format_user_prompt(question, choices, docs)
     messages = [
         {
@@ -77,12 +78,6 @@ def answer_query(question: str, choices: List[str], documents: List[str]) -> str
             "content": user_prompt
         }
     ]
-    
-    # Load model client
-    client = OpenAI(
-        api_key="fahy.jo@northeastern.edu:46582",
-        base_url="https://nerc.guha-anderson.com/v1"
-    )
 
     try:
         # Query model
@@ -92,24 +87,32 @@ def answer_query(question: str, choices: List[str], documents: List[str]) -> str
             temperature=0
         )
 
-            # Extract answer
+        # Extract answer
         model_answer = extract_answer(resp.choices[0].message.content)
+        return model_answer
     except Exception as e:
-        resp = ""
-        print(len(messages))
-        print(f"failed to get ai answer: {e}")
+        print(f"Query failed for question {question}: {e}")
+        return None
 
-        return None, None
+def answer_query(question: str, choices: List[str], documents: List[str]) -> str:
+    """
+    Wrapper around solve. Converts given documents into dictionaries for compatibility with
+    rest of script.
+
+    Args:
+        question: The obscure question
+        choices: The multiple choice options
+        documents: List of articles' text
     
-    
+    Returns:
+        The model's answer to the given question.
 
-
-    return model_answer, resp.choices[0].message.content
-
+    """
+    documents = [{'title': f"Article {i}", 'text': doc} for i, doc in enumerate(documents)]
+    return solve(question, choices, documents)
 
 
 if __name__ == "__main__":
-
     # Load datasets
     wiki = load_dataset("nuprl/engineering-llm-systems", 
                         name="wikipedia-northeastern-university", 
@@ -118,7 +121,12 @@ if __name__ == "__main__":
     questions = load_dataset("nuprl/engineering-llm-systems", 
                             name="obscure_questions", 
                             split="tiny")
-
+    
+    # Load model client
+    client = OpenAI(
+        api_key="fahy.jo@northeastern.edu:46582",
+        base_url="https://nerc.guha-anderson.com/v1"
+    )
 
     # Answer questions
     num_correct = 0
@@ -128,21 +136,15 @@ if __name__ == "__main__":
         choices = question['choices']
         answer = question['correct_answer']
 
-        model_answer, resp = answer_query(prompt, choices, wiki)
+        model_answer = solve(client, prompt, choices, wiki)
 
         if not model_answer:
             print(f"Failed to extract answer for question: {i}")
-            # print(resp)
         
         # Check answer
         if model_answer == answer:
-            # print('correct')
             num_correct += 1
             solved_questions.append(i)
 
-        # else:
-            # print(resp)
-    
-    # Print results
     print(f"Solved {num_correct} questions")
     print(f"Solved questions: {solved_questions}")
